@@ -57,14 +57,14 @@ contract DGCNode is Initializable, ERC721Upgradeable, OwnableUpgradeable  {
     }
 
     function _baseURI() internal pure override returns (string memory) {
-        return "https://raw.githubusercontent.com/DeepLinkProtocol/DeepLinkNodeNFTContact/master/resource/DLC-node-metadata/";
+        return "https://raw.githubusercontent.com/AIDecentralGPT/DecentralGPT-NFTNode/master/resource/DGC-node-metadata/";
     }
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         _requireOwned(tokenId);
 
         uint16 levelNumber = 1;
-        for (uint16 level = 1; level  <= 10; level++){
+        for (uint16 level = 1; level  <= 9; level++){
             TokenIdRange memory levelTokenIdRange = levelNumber2TokenIdRange[level];
             if (levelTokenIdRange.startTokenId <= tokenId && tokenId <= levelTokenIdRange.endTokenId) {
                 levelNumber = level;
