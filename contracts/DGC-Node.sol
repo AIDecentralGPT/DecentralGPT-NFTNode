@@ -57,7 +57,7 @@ contract DGCNode is Initializable, ERC721Upgradeable, OwnableUpgradeable  {
     }
 
     function _baseURI() internal pure override returns (string memory) {
-        return "https://github.com/AIDecentralGPT/DecentralGPT-NFTNode/blob/master/resource/DGC-node-metadata/";
+        return "https://raw.githubusercontent.com/AIDecentralGPT/DecentralGPT-NFTNode/master/resource/DGC-node-metadata/";
     }
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
