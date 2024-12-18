@@ -8,8 +8,7 @@ async function main() {
     const upgrade = await upgrades.deployProxy(
         contractFactory ,
         [process.env.OWNER],
-        { initializer: 'initialize' },
-        { txOverrides: {gasLimit: 300000}}
+        { initializer: 'initialize' }
     );
     console.log("deployed to:", upgrade.target);
 }
