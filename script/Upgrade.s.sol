@@ -31,7 +31,7 @@ contract Upgrade is Script {
         //
         //                Upgrades.validateUpgrade("NFTStaking.sol:NFTStaking", opts);
 
-        Upgrades.upgradeProxy(transparentProxy, "DLGNode.sol:DGCNode", "");
+        Upgrades.upgradeProxy(transparentProxy, "DGCNode.sol:DGCNode", "");
 
         vm.stopBroadcast();
     }

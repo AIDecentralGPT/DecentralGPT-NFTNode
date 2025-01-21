@@ -8,13 +8,12 @@ import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721Enumer
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-/// @custom:oz-upgrades-from OldDGCNode
-contract DGCNode is
-    Initializable,
-    ERC721Upgradeable,
-    OwnableUpgradeable,
-    ERC721EnumerableUpgradeable,
-    UUPSUpgradeable
+contract OldDGCNode is
+Initializable,
+ERC721Upgradeable,
+OwnableUpgradeable,
+ERC721EnumerableUpgradeable,
+UUPSUpgradeable
 {
     uint256 private _nextTokenId;
     uint256 private TOKEN_CAP;
@@ -152,30 +151,30 @@ contract DGCNode is
     }
 
     function _update(address to, uint256 tokenId, address auth)
-        internal
-        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
-        returns (address)
+    internal
+    override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
+    returns (address)
     {
         return super._update(to, tokenId, auth);
     }
 
     function _increaseBalance(address account, uint128 value)
-        internal
-        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
+    internal
+    override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
     {
         super._increaseBalance(account, value);
     }
 
     function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
-        returns (bool)
+    public
+    view
+    override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
+    returns (bool)
     {
         return super.supportsInterface(interfaceId);
     }
 
     function version() public pure returns (uint256) {
-        return 1;
+        return 0;
     }
 }
