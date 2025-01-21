@@ -4,9 +4,17 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-
-contract DGCNode is Initializable, ERC721Upgradeable, OwnableUpgradeable  {
+contract DGCNode is
+    Initializable,
+    ERC721Upgradeable,
+    OwnableUpgradeable,
+    ERC721EnumerableUpgradeable,
+    UUPSUpgradeable
+{
     uint256 private _nextTokenId;
     uint256 private TOKEN_CAP;
 
@@ -19,17 +27,41 @@ contract DGCNode is Initializable, ERC721Upgradeable, OwnableUpgradeable  {
     mapping(uint16 => TokenIdRange) public levelNumber2TokenIdRange;
     mapping(address => mapping(uint16 => bool)) public minter2MintLevel;
 
-    event mintedToken(address indexed to,uint256 startTokenId, uint256 endTokenId);
-    modifier onlyMinter2MintLevel(uint16 level){
-         require(minter2MintLevel[msg.sender][level], "Not authorized to mint this level");
-         _;
+    event mintedToken(address indexed to, uint256 startTokenId, uint256 endTokenId);
+
+    modifier onlyMinter2MintLevel(uint16 level) {
+        require(minter2MintLevel[msg.sender][level], "Not authorized to mint this level");
+        _;
     }
 
-    function initialize(address initialOwner) initializer public {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address initialOwner) public initializer {
         __ERC721_init("DGC-Node", "DGCN");
         __Ownable_init(initialOwner);
+        __ERC721Enumerable_init();
+        __UUPSUpgradeable_init();
         TOKEN_CAP = 100_000;
         setLevel2TokenIdRange();
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    function tokensOfOwner(address owner, uint256 limit) external view returns (uint256[] memory) {
+        uint256 balance = balanceOf(owner);
+        uint256[] memory tokenIds = new uint256[](Math.min(balance, limit));
+
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            uint256 tokenId = tokenOfOwnerByIndex(owner, i);
+            if (tokenId != 0) {
+                tokenIds[i] = tokenId;
+            }
+        }
+
+        return tokenIds;
     }
 
     function setLevel2TokenIdRange() internal onlyOwner {
@@ -44,27 +76,26 @@ contract DGCNode is Initializable, ERC721Upgradeable, OwnableUpgradeable  {
         levelNumber2TokenIdRange[9] = TokenIdRange(98321, 100000, 98321);
     }
 
-
     function addMinter2MintLevel(address minter, uint16[] calldata levels) external onlyOwner {
         for (uint256 i = 0; i < levels.length; i++) {
             uint16 level = levels[i];
-            require(level<=10 && level>=1, "Level should be between 1 and 10");
-            minter2MintLevel[minter][level]= true;
+            require(level <= 10 && level >= 1, "Level should be between 1 and 10");
+            minter2MintLevel[minter][level] = true;
         }
     }
 
-    function removeMintLevelOfMinter(address minter,uint16[] calldata levels) external onlyOwner {
+    function removeMintLevelOfMinter(address minter, uint16[] calldata levels) external onlyOwner {
         for (uint256 i = 0; i < levels.length; i++) {
             uint16 level = levels[i];
-            require(level<=10 && level>=1, "Level should be between 1 and 10");
+            require(level <= 10 && level >= 1, "Level should be between 1 and 10");
             minter2MintLevel[minter][level] = false;
         }
     }
 
     function safeBatchMint(address to, uint16 level, uint256 amount) public onlyMinter2MintLevel(level) {
-        require(level<=10 && level>=1, "Level should be between 1 and 10");
+        require(level <= 10 && level >= 1, "Level should be between 1 and 10");
         TokenIdRange memory levelTokenIdRange = levelNumber2TokenIdRange[level];
-        require(levelTokenIdRange.nextTokenId-1 + amount <= levelTokenIdRange.endTokenId, "Token range not available");
+        require(levelTokenIdRange.nextTokenId - 1 + amount <= levelTokenIdRange.endTokenId, "Token range not available");
 
         uint256 startTokenId = levelTokenIdRange.nextTokenId;
         for (uint256 i = 0; i < amount; i++) {
@@ -72,19 +103,20 @@ contract DGCNode is Initializable, ERC721Upgradeable, OwnableUpgradeable  {
             _safeMint(to, tokenId);
         }
         levelNumber2TokenIdRange[level] = levelTokenIdRange;
-        uint256 endTokenId = levelTokenIdRange.nextTokenId-1;
+        uint256 endTokenId = levelTokenIdRange.nextTokenId - 1;
         emit mintedToken(to, startTokenId, endTokenId);
     }
 
     function _baseURI() internal pure override returns (string memory) {
-        return "https://raw.githubusercontent.com/AIDecentralGPT/DecentralGPT-NFTNode/master/resource/DGC-node-metadata/";
+        return
+            "https://raw.githubusercontent.com/AIDecentralGPT/DecentralGPT-NFTNode/foundry/resource/DGC-node-metadata/";
     }
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         _requireOwned(tokenId);
 
         uint16 levelNumber = 1;
-        for (uint16 level = 1; level  <= 9; level++){
+        for (uint16 level = 1; level <= 9; level++) {
             TokenIdRange memory levelTokenIdRange = levelNumber2TokenIdRange[level];
             if (levelTokenIdRange.startTokenId <= tokenId && tokenId <= levelTokenIdRange.endTokenId) {
                 levelNumber = level;
@@ -96,7 +128,7 @@ contract DGCNode is Initializable, ERC721Upgradeable, OwnableUpgradeable  {
     }
 
     function tier(uint256 tokenId) public pure returns (uint16) {
-        if (tokenId >=1 && tokenId <= 40000) {
+        if (tokenId >= 1 && tokenId <= 40000) {
             return 1;
         } else if (tokenId >= 40001 && tokenId <= 60000) {
             return 2;
@@ -116,6 +148,30 @@ contract DGCNode is Initializable, ERC721Upgradeable, OwnableUpgradeable  {
             return 9;
         }
         return 0;
+    }
+
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
+        returns (address)
+    {
+        return super._update(to, tokenId, auth);
+    }
+
+    function _increaseBalance(address account, uint128 value)
+        internal
+        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
+    {
+        super._increaseBalance(account, value);
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 
     function version() public pure returns (uint256) {
