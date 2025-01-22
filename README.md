@@ -1,4 +1,4 @@
 # DecentralGPT-NFTNode
 
 ### DBC Mainnet
-#### Contract Address: 0x73bf0F2a651A916cFDd5903a4c1DA24857F8590b
+#### Contract Address: 0x401c8ab3252539e0169163e351acd1736defb029
