@@ -1,37 +1,41 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.22;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "forge-std/console.sol";
 
-contract OldDGCNode is
-Initializable,
-ERC721Upgradeable,
-OwnableUpgradeable,
-ERC721EnumerableUpgradeable,
-UUPSUpgradeable
-{
-    uint256 private _nextTokenId;
-    uint256 private TOKEN_CAP;
+contract OldDGCNode is Initializable, ERC1155Upgradeable, OwnableUpgradeable, UUPSUpgradeable {
+    uint256 public constant MAX_LEVEL = 10;
 
-    struct TokenIdRange {
-        uint256 startTokenId;
-        uint256 endTokenId;
-        uint256 nextTokenId;
+    string private _name;
+    string private _symbol;
+
+    struct LevelConfig {
+        uint256 maxSupply; // Maximum supply for this level
+        uint256 minted; // Number of tokens minted for this level
     }
 
-    mapping(uint16 => TokenIdRange) public levelNumber2TokenIdRange;
-    mapping(address => mapping(uint16 => bool)) public minter2MintLevel;
+    mapping(uint256 => LevelConfig) public levels; // Level configurations (1-10)
+    mapping(address => mapping(uint256 => bool)) public minter2MintLevel; // Authorization for minters
 
-    event mintedToken(address indexed to, uint256 startTokenId, uint256 endTokenId);
+    mapping(address => uint256[]) public address2TokenIds;
 
-    modifier onlyMinter2MintLevel(uint16 level) {
-        require(minter2MintLevel[msg.sender][level], "Not authorized to mint this level");
-        _;
+    event Minted(address indexed to, uint256 level, uint256 amount);
+
+    function initialize(address initialOwner) public initializer {
+        __ERC1155_init(
+            "https://raw.githubusercontent.com/AIDecentralGPT/DecentralGPT-NFTNode/foundry/resource/DGC-node-metadata/{id}.json"
+        );
+        __Ownable_init(initialOwner);
+        __UUPSUpgradeable_init();
+
+        _name = "DGC-Node";
+        _symbol = "DGCN";
+        setLevelConfigs();
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -39,142 +43,183 @@ UUPSUpgradeable
         _disableInitializers();
     }
 
-    function initialize(address initialOwner) public initializer {
-        __ERC721_init("DGC-Node", "DGCN");
-        __Ownable_init(initialOwner);
-        __ERC721Enumerable_init();
-        __UUPSUpgradeable_init();
-        TOKEN_CAP = 100_000;
-        setLevel2TokenIdRange();
+    function name() public view returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view returns (string memory) {
+        return _symbol;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function tokensOfOwner(address owner, uint256 limit) external view returns (uint256[] memory) {
-        uint256 balance = balanceOf(owner);
-        uint256[] memory tokenIds = new uint256[](Math.min(balance, limit));
-
-        for (uint256 i = 0; i < tokenIds.length; i++) {
-            uint256 tokenId = tokenOfOwnerByIndex(owner, i);
-            if (tokenId != 0) {
-                tokenIds[i] = tokenId;
-            }
+    modifier onlyMinterForLevel(uint256[] memory _levels) {
+        for (uint256 i = 0; i < _levels.length; i++) {
+            uint256 level = _levels[i];
+            require(level >= 1 && level <= MAX_LEVEL, "Invalid level");
+            require(hasMintAuthorization(msg.sender, level), "Not authorized to mint this level");
         }
-
-        return tokenIds;
+        _;
     }
 
-    function setLevel2TokenIdRange() internal onlyOwner {
-        levelNumber2TokenIdRange[1] = TokenIdRange(1, 40000, 1);
-        levelNumber2TokenIdRange[2] = TokenIdRange(40001, 60000, 40001);
-        levelNumber2TokenIdRange[3] = TokenIdRange(60001, 73300, 60001);
-        levelNumber2TokenIdRange[4] = TokenIdRange(73301, 82420, 73301);
-        levelNumber2TokenIdRange[5] = TokenIdRange(82421, 88820, 82421);
-        levelNumber2TokenIdRange[6] = TokenIdRange(88821, 93320, 88821);
-        levelNumber2TokenIdRange[7] = TokenIdRange(93321, 96320, 93321);
-        levelNumber2TokenIdRange[8] = TokenIdRange(96321, 98320, 96321);
-        levelNumber2TokenIdRange[9] = TokenIdRange(98321, 100000, 98321);
+    function hasMintAuthorization(address addr, uint256 level) internal view returns (bool) {
+        return minter2MintLevel[addr][level];
     }
 
-    function addMinter2MintLevel(address minter, uint16[] calldata levels) external onlyOwner {
-        for (uint256 i = 0; i < levels.length; i++) {
-            uint16 level = levels[i];
-            require(level <= 10 && level >= 1, "Level should be between 1 and 10");
+    function setLevelConfigs() internal onlyOwner {
+        levels[1] = LevelConfig(8000, 0);
+        levels[2] = LevelConfig(10000, 0);
+        levels[3] = LevelConfig(12000, 0);
+        levels[4] = LevelConfig(15000, 0);
+        levels[5] = LevelConfig(21000, 0);
+        levels[6] = LevelConfig(16000, 0);
+        levels[7] = LevelConfig(12000, 0);
+        levels[8] = LevelConfig(10000, 0);
+        levels[9] = LevelConfig(8000, 0);
+        levels[10] = LevelConfig(8000, 0);
+    }
+
+    function batchMint(address to, uint256[] memory _levels, uint256[] memory amounts)
+        public
+        onlyMinterForLevel(_levels)
+    {
+        require(_levels.length == amounts.length, "Invalid input");
+        for (uint256 i = 0; i < _levels.length; i++) {
+            uint256 level = _levels[i];
+            uint256 amount = amounts[i];
+            require(level >= 1 && level <= MAX_LEVEL, "Invalid level");
+            LevelConfig storage config = levels[level];
+            require(config.minted + amount <= config.maxSupply, "Exceeds max supply for level");
+
+            config.minted += amount;
+            _mint(to, level, amount, "");
+            emit Minted(to, level, amount);
+        }
+    }
+
+    function mint(address to, uint256 level, uint256 amount) public {
+        require(hasMintAuthorization(msg.sender, level), "Not authorized to mint this level");
+        require(level >= 1 && level <= MAX_LEVEL, "Invalid level");
+        LevelConfig storage config = levels[level];
+        require(config.minted + amount <= config.maxSupply, "Exceeds max supply for level");
+
+        config.minted += amount;
+        _mint(to, level, amount, "");
+        emit Minted(to, level, amount);
+    }
+
+    function setMinterForLevels(address minter, uint256[] calldata levelsToSet) external onlyOwner {
+        for (uint256 i = 0; i < levelsToSet.length; i++) {
+            uint256 level = levelsToSet[i];
+            require(level >= 1 && level <= MAX_LEVEL, "Invalid level");
             minter2MintLevel[minter][level] = true;
         }
     }
 
-    function removeMintLevelOfMinter(address minter, uint16[] calldata levels) external onlyOwner {
-        for (uint256 i = 0; i < levels.length; i++) {
-            uint16 level = levels[i];
-            require(level <= 10 && level >= 1, "Level should be between 1 and 10");
+    function removeMinterForLevels(address minter, uint256[] calldata levelsToRemove) external onlyOwner {
+        for (uint256 i = 0; i < levelsToRemove.length; i++) {
+            uint256 level = levelsToRemove[i];
+            require(level >= 1 && level <= MAX_LEVEL, "Invalid level");
             minter2MintLevel[minter][level] = false;
         }
     }
 
-    function safeBatchMint(address to, uint16 level, uint256 amount) public onlyMinter2MintLevel(level) {
-        require(level <= 10 && level >= 1, "Level should be between 1 and 10");
-        TokenIdRange memory levelTokenIdRange = levelNumber2TokenIdRange[level];
-        require(levelTokenIdRange.nextTokenId - 1 + amount <= levelTokenIdRange.endTokenId, "Token range not available");
-
-        uint256 startTokenId = levelTokenIdRange.nextTokenId;
-        for (uint256 i = 0; i < amount; i++) {
-            uint256 tokenId = levelTokenIdRange.nextTokenId++;
-            _safeMint(to, tokenId);
-        }
-        levelNumber2TokenIdRange[level] = levelTokenIdRange;
-        uint256 endTokenId = levelTokenIdRange.nextTokenId - 1;
-        emit mintedToken(to, startTokenId, endTokenId);
-    }
-
-    function _baseURI() internal pure override returns (string memory) {
+    function _baseURI() internal pure returns (string memory) {
         return
             "https://raw.githubusercontent.com/AIDecentralGPT/DecentralGPT-NFTNode/foundry/resource/DGC-node-metadata/";
     }
 
-    function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        _requireOwned(tokenId);
+    function uri(uint256 id) public pure override returns (string memory) {
+        require(id >= 1 && id <= MAX_LEVEL, "Invalid token ID");
+        return string(abi.encodePacked(_baseURI(), Strings.toString(id), ".json"));
+    }
 
-        uint16 levelNumber = 1;
-        for (uint16 level = 1; level <= 9; level++) {
-            TokenIdRange memory levelTokenIdRange = levelNumber2TokenIdRange[level];
-            if (levelTokenIdRange.startTokenId <= tokenId && tokenId <= levelTokenIdRange.endTokenId) {
-                levelNumber = level;
+    function supportsInterface(bytes4 interfaceId) public view override(ERC1155Upgradeable) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    function getBalance(address owner, uint256 amount)
+        public
+        view
+        returns (uint256[] memory tokenIds, uint256[] memory amounts)
+    {
+        require(owner != address(0), "Invalid address");
+        require(amount > 0, "Amount must be greater than zero");
+
+        uint256[] storage ownedTokenIds = address2TokenIds[owner];
+        uint256 ownedCount = ownedTokenIds.length;
+
+        tokenIds = new uint256[](ownedCount);
+        amounts = new uint256[](ownedCount);
+
+        uint256 remainingAmount = amount;
+        uint256 index = 0;
+
+        for (uint256 i = 0; i < ownedCount; i++) {
+            uint256 tokenId = ownedTokenIds[i];
+            uint256 balance = balanceOf(owner, tokenId);
+
+            if (balance > 0) {
+                if (balance >= remainingAmount) {
+                    tokenIds[index] = tokenId;
+                    amounts[index] = remainingAmount;
+                    index++;
+                    break;
+                } else {
+                    tokenIds[index] = tokenId;
+                    amounts[index] = balance;
+                    remainingAmount -= balance;
+                    index++;
+                }
+            }
+
+            // Stop if we've fulfilled the required amount
+            if (remainingAmount == 0) {
                 break;
             }
         }
 
-        return string(abi.encodePacked(_baseURI(), Strings.toString(levelNumber), ".json"));
-    }
-
-    function tier(uint256 tokenId) public pure returns (uint16) {
-        if (tokenId >= 1 && tokenId <= 40000) {
-            return 1;
-        } else if (tokenId >= 40001 && tokenId <= 60000) {
-            return 2;
-        } else if (tokenId >= 60001 && tokenId <= 73300) {
-            return 3;
-        } else if (tokenId >= 73301 && tokenId <= 82420) {
-            return 4;
-        } else if (tokenId >= 82421 && tokenId <= 88820) {
-            return 5;
-        } else if (tokenId >= 88821 && tokenId <= 93320) {
-            return 6;
-        } else if (tokenId >= 93321 && tokenId <= 96320) {
-            return 7;
-        } else if (tokenId >= 96321 && tokenId <= 98320) {
-            return 8;
-        } else if (tokenId >= 98321 && tokenId <= 100000) {
-            return 9;
+        // Resize arrays to actual size
+        assembly {
+            mstore(tokenIds, index)
+            mstore(amounts, index)
         }
-        return 0;
     }
 
-    function _update(address to, uint256 tokenId, address auth)
-    internal
-    override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
-    returns (address)
-    {
-        return super._update(to, tokenId, auth);
+    function _update(address from, address to, uint256[] memory ids, uint256[] memory amounts) internal override {
+        super._update(from, to, ids, amounts);
+
+        if (from != address(0)) {
+            for (uint256 i = 0; i < ids.length; i++) {
+                uint256 id = ids[i];
+                if (balanceOf(from, id) == 0) {
+                    _removeTokenId(from, id);
+                }
+            }
+        }
+
+        if (to != address(0)) {
+            for (uint256 i = 0; i < ids.length; i++) {
+                uint256 id = ids[i];
+                if (balanceOf(to, id) > 0) {
+                    address2TokenIds[to].push(id);
+                }
+            }
+        }
     }
 
-    function _increaseBalance(address account, uint128 value)
-    internal
-    override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
-    {
-        super._increaseBalance(account, value);
-    }
-
-    function supportsInterface(bytes4 interfaceId)
-    public
-    view
-    override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
-    returns (bool)
-    {
-        return super.supportsInterface(interfaceId);
+    function _removeTokenId(address account, uint256 id) internal {
+        uint256[] storage tokenIds = address2TokenIds[account];
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            if (tokenIds[i] == id) {
+                tokenIds[i] = tokenIds[tokenIds.length - 1];
+                tokenIds.pop();
+                break;
+            }
+        }
     }
 
     function version() public pure returns (uint256) {
-        return 0;
+        return 1;
     }
 }
