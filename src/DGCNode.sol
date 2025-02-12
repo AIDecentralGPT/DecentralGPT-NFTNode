@@ -24,6 +24,7 @@ contract DGCNode is Initializable, ERC1155Upgradeable, OwnableUpgradeable, UUPSU
     mapping(address => mapping(uint256 => bool)) public minter2MintLevel; // Authorization for minters
 
     mapping(address => uint256[]) public address2TokenIds;
+    address public canUpgradeAddress;
 
     event Minted(address indexed to, uint256 level, uint256 amount);
 
@@ -52,7 +53,14 @@ contract DGCNode is Initializable, ERC1155Upgradeable, OwnableUpgradeable, UUPSU
         return _symbol;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal view override onlyOwner {
+        require(newImplementation != address(0), "Invalid implementation address");
+        require(msg.sender == canUpgradeAddress || msg.sender == owner(), "Only canUpgradeAddress can upgrade");
+    }
+
+    function setCanUpgradeAddress(address addr) internal onlyOwner {
+        canUpgradeAddress = addr;
+    }
 
     modifier onlyMinterForLevel(uint256[] memory _levels) {
         for (uint256 i = 0; i < _levels.length; i++) {
@@ -202,7 +210,9 @@ contract DGCNode is Initializable, ERC1155Upgradeable, OwnableUpgradeable, UUPSU
             for (uint256 i = 0; i < ids.length; i++) {
                 uint256 id = ids[i];
                 if (balanceOf(to, id) > 0) {
-                    address2TokenIds[to].push(id);
+                    if (!exits(address2TokenIds[to], id)){
+                        address2TokenIds[to].push(id);
+                    }
                 }
             }
         }
@@ -217,6 +227,15 @@ contract DGCNode is Initializable, ERC1155Upgradeable, OwnableUpgradeable, UUPSU
                 break;
             }
         }
+    }
+
+    function exits(uint256[] memory list, uint256 target) internal pure returns (bool) {
+        for (uint256 i = 0; i < list.length; i++) {
+            if (list[i] == target) {
+                return true;
+            }
+        }
+        return false;
     }
 
     function version() public pure returns (uint256) {
